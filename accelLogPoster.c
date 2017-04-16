@@ -2,6 +2,8 @@
  
 static Window* window;
 static TextLayer   *accel_layer;
+static DictationSession *s_dictation_session;
+
  bool message = true;
 static void window_load(Window *window)
 {
@@ -21,7 +23,49 @@ static void window_unload(Window *window)
   text_layer_destroy(accel_layer);
 }
 
+static void dictation_session_callback(DictationSession *session, DictationSessionStatus status,
+                                       char *transcription, void *context) {
+  // Print the results of a transcription attempt
+  APP_LOG(APP_LOG_LEVEL_INFO, "Dictation status: %d", (int)status);
+  
+  if(status == DictationSessionStatusSuccess) {
+  // Display the dictated text
+  APP_LOG(APP_LOG_LEVEL_INFO, "transcription %s", transcription);
+    DictionaryIterator *iter;
+  app_message_outbox_begin(&iter);
 
+    dict_write_cstring(iter, "voice", transcription);
+
+
+  dict_write_end(iter);
+  app_message_outbox_send();
+} else {
+  // Display the reason for any error
+}
+}
+
+static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  // A single click has just occured
+  APP_LOG(APP_LOG_LEVEL_INFO, "Button clicked %i", 3);
+  
+  // Declare a buffer for the DictationSession
+  static char s_last_text[512];
+  
+  // Create new dictation session
+  s_dictation_session = dictation_session_create(sizeof(s_last_text),
+                                               dictation_session_callback, NULL);
+  
+  // Start dictation UI
+  dictation_session_start(s_dictation_session);
+}
+
+static void click_config_provider(void *context) {
+  // Subcribe to button click events here
+  ButtonId id = BUTTON_ID_SELECT;  // The Select button
+
+  window_single_click_subscribe(id, select_click_handler);
+
+}
 
 
 
@@ -77,6 +121,8 @@ if(result == APP_MSG_OK) {
 static void init()
 {
   window = window_create();
+  // Use this provider to add button click subscriptions
+  window_set_click_config_provider(window, click_config_provider);
   WindowHandlers handlers = {
     .load = window_load,
     .unload = window_unload
